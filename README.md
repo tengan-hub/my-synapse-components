@@ -1,0 +1,1 @@
+# my-synapse-components
