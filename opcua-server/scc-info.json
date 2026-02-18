@@ -1,0 +1,21 @@
+{
+  "package-name": "OPC UA Server",
+  "package-version": "0.1.0",
+  "package-uuid": "606af0a6-282f-4ba4-aaff-e364b8a5af6e",
+  "package-description": "OPC UA Server component",
+  "python-components-source-dir": "source/python",
+  "author": "",
+  "license": "",
+  "license-file": "",
+  "components": {
+    "7e707be1-6270-4a26-b11b-08e578f9b3fa": {
+      "name": "OPC UA Server",
+      "description": "",
+      "component-type": "python",
+      "modulename": "tt_custom.opcua_server",
+      "parameter-ui-type": "html",
+      "parameter-ui": "parameter_ui/opcua-server/dist",
+      "parameter-ui-attachment": false
+    }
+  }
+}

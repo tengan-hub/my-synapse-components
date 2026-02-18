@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vite App</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      if (import.meta.env.MODE === 'development') {
+        // 開発時だけ #app を #development でラップ
+        const app = document.getElementById('app');
+        const div = document.createElement('div');
+        div.id = 'development';
+        div.className = 'window-size-middle';
+        app.parentNode.insertBefore(div, app);
+        div.appendChild(app);
+      }
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
