@@ -12,6 +12,7 @@ dependencies = [
 
 [tool.taskipy.tasks]
 build = "task build_vue && task pack"
+dev = "task build_vue && uv run sccde serve --port 8123 --reload"
 build_vue = "cd parameter_ui/opcua-server && npm install && npm run build"
 pack = "uv run sccde make-package"
 lint = "uvx ruff check source"

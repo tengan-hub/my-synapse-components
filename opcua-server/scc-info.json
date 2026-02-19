@@ -14,8 +14,12 @@
       "component-type": "python",
       "modulename": "tt_custom.opcua_server",
       "parameter-ui-type": "html",
+      "parameter-ui-size": "middle",
       "parameter-ui": "parameter_ui/opcua-server/dist",
       "parameter-ui-attachment": false
     }
-  }
+  },
+  "python-requirements": [
+    "asyncua==1.1.8"
+  ]
 }

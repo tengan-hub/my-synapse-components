@@ -8,6 +8,7 @@ import { TsFormat, tsFormatOptions } from './constants/tsFormatOptions';
 import { ChFlag, chFlagOptions } from './constants/chFlagOptions';
 import { Round, roundOptions } from './constants/roundOptions';
 import { useValidationRules } from './utils/validationRules';
+import SynapseInput from './components/ui/SynapseInput.vue';
 import SynapseSelect from './components/ui/SynapseSelect.vue';
 
 const rules = useValidationRules();
@@ -18,19 +19,13 @@ const editMode = ref(true);
 const inputDataList = ref<string[]>([]);
 
 const parameter = reactive({
-  delimiter: Delimiter.COMMA,
-  crlf: NewlineCode.LF,
-  header: true,
-  roundflg: TsFormat.SEC,
-  chg_flg: ChFlag.COUNT,
-  maxline: 10,
-  bom: true,
+  endpoint: '',
+  server_name: '',
+  namespace_uri: '',
+  enable_anounymous: false,
+  auth_method: [] as string[],
   colmap: [] as { data_in: string, data_round: Round }[],
-  paid_key: '',
 });
-
-const paidKeyInput = ref('');
-const registedPaidKey = ref(false);
 
 if (lib) {
   lib.onLoad = onLoad;
@@ -41,29 +36,12 @@ async function onLoad(editable: boolean, param: any, isNewComponent: boolean, co
   editMode.value = editable;
 
   if (param) {
-    parameter.delimiter = param.delimiter ?? Delimiter.COMMA;
-    parameter.crlf = param.crlf ?? NewlineCode.LF;
-    parameter.header = param.header ?? true;
-    parameter.roundflg = param.roundflg ?? TsFormat.SEC;
-    parameter.chg_flg = param.chg_flg ?? ChFlag.COUNT;
-    parameter.maxline = param.maxline ?? 10;
-    parameter.bom = param.bom ?? true;
+    parameter.endpoint = param.endpoint ?? '';
+    parameter.server_name = param.server_name ?? '';
+    parameter.namespace_uri = param.namespace_uri ?? '';
+    parameter.enable_anounymous = param.enable_anounymous ?? false;
+    parameter.auth_method = param.auth_method ?? [];
     parameter.colmap = param.colmap ?? [];
-    parameter.paid_key = param.paid_key ?? '';
-  }
-
-  if (isNewComponent) {
-    console.log('Parameter setting for new component instance.');
-  } else {
-    console.log(`Parameter update for component instance ${componentId}.`);
-    if (componentId) {
-      const res = await lib.api.runMethod(componentId, 'verify_paid_key_method', parameter);
-      registedPaidKey.value = res.result.success ?? false;
-      const inportData = await lib.api.getInPortData(componentId);
-      for (const item of inportData.data) {
-        inputDataList.value.push(`${item.source}:${item.name}`);
-      }
-    }
   }
 }
 
@@ -86,9 +64,6 @@ async function onSave() {
       return null;
     }
   }
-
-  // paid_keyが入力されていればそれを使い、なければキャッシュを使う
-  parameter.paid_key = paidKeyInput.value || parameter.paid_key;
 
   return parameter;
 }
@@ -124,59 +99,39 @@ function onComponentNameFilter(val: string, update: Function) {
 <template>
   <q-form ref="formRef" @validation-error="(ref: any) => ref.$el?.scrollIntoView(false)">
     <div class="row justify-start q-gutter-sm">
-      <SynapseSelect
-        v-model="parameter.delimiter" class="col-4" label="区切り文字"
-        :options="delimitersOptions" :disable="!editMode" :rules="[rules.required]"
+      <SynapseInput
+        v-model="parameter.server_name" class="col-4" label="サーバ名"
+        :disable="!editMode" :rules="[rules.required]"
       />
-      <q-select
-        v-model="parameter.crlf" class="col-4" label="改行コード"
-        map-options emit-value dense options-dense no-error-icon
-        label-color="white" color="blue" style="white-space: nowrap;"
-        :options="newlineCodeOptions" :disable="!editMode" :rules="[rules.required]"
-      />
-      <q-checkbox
-        v-model="parameter.header" class="col-3" label="ヘッダを付ける"
-        color="blue" label-color="white" dense :disable="!editMode" style="white-space: nowrap;"
+      <SynapseInput
+        v-model="parameter.endpoint" class="col-7" label="エンドポイントURL"
+        :disable="!editMode" :rules="[rules.required]" prefix="opc.tcp://"
       />
     </div>
+
     <div class="row justify-start q-gutter-sm">
-      <q-select
-        v-model="parameter.roundflg" class="col-4" label="タイムスタンプフォーマット($ts)"
-        map-options emit-value dense options-dense no-error-icon
-        label-color="white" color="blue" style="white-space: nowrap;"
-        :options="tsFormatOptions" :disable="!editMode" :rules="[rules.required]"
-      />
-      <div class="row justify-start col-4">
-        <q-input
-          v-if="parameter.chg_flg === 0" v-model="parameter.maxline" class="col-8" label="切替基準"
-          type="text" label-color="white" color="blue" dense no-error-icon :disable="!editMode"
-          mask="#####" :rules="[rules.required, rules.range(1, 10000)]"
-        />
-        <q-input
-          v-else v-model="parameter.maxline" class="col-8" label="切替基準"
-          type="text" label-color="white" color="blue" dense no-error-icon
-          :disable="!editMode"
-          mask="####" :rules="[rules.required, rules.range(1, 3600)]"
-        />
-        <q-select
-          v-model="parameter.chg_flg" class="col-4" label=""
-          map-options emit-value dense options-dense no-error-icon
-          label-color="white" color="blue" style="white-space: nowrap;"
-          :options="chFlagOptions" :disable="!editMode" :rules="[rules.required]"
-          @update:model-value="(val: ChFlag) => {
-            parameter.maxline = val === ChFlag.COUNT
-              ? Number(String(parameter.maxline).slice(0, 5))
-              : Number(String(parameter.maxline).slice(0, 4))
-          }"
-        />
-      </div>
-      <q-checkbox
-        v-model="parameter.bom" class="col-3" label="BOMを付ける"
-        color="blue" label-color="white" dense :disable="!editMode" style="white-space: nowrap;"
+      <SynapseInput
+        v-model="parameter.namespace_uri" class="col-7" label="Namespace URI"
+        :disable="!editMode" :rules="[rules.required]"
       />
     </div>
 
     <div>
+      <SynapseSelect
+        v-model="parameter.auth_method" class="col-11" label="認証方式"
+        :options="delimitersOptions" :disable="!editMode" :rules="[rules.required]"
+        :multiple="true"
+      />
+    </div>
+
+    <div class="row justify-start q-gutter-sm">
+      <q-checkbox
+        v-model="parameter.enable_anounymous" class="col-3" label="匿名アクセス許可"
+        color="blue" label-color="white" dense :disable="!editMode" style="white-space: nowrap;"
+      />
+    </div>
+
+    <!-- <div>
       <q-table
         v-model:pagination="tablePagenation"
         ref="qTableRef" style="height: 300px;" class="q-py-sm common-table-header-sticky"
@@ -237,13 +192,7 @@ function onComponentNameFilter(val: string, update: Function) {
           size="md" color="white" flat :disable="!editMode" @click="addRow"
         />
       </div>
-    </div>
-    <div class="row justify-start q-mt-md">
-      <q-input
-        v-model="paidKeyInput" class="col-12" label="アクティベーションキー" :placeholder="registedPaidKey ? '登録済み' : '未登録もしくは無効なキー'"
-        type="text" label-color="white" color="blue" dense no-error-icon :disable="!editMode" stack-label
-      />
-    </div>
+    </div> -->
   </q-form>
 </template>
 
