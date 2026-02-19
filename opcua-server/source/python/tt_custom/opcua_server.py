@@ -109,21 +109,15 @@ class HiveComponent(HiveComponentBase):
                     self.log.info(column.source_name)
                     # source_nameに一致するコンポーネントを取得
                     component = self.opcua_component_manager.get_component(column.source_name)
-                    self.log.info(f"Component found: {component.name}" if component else "Component not found, creating new one.")
-                    self.log.info("####################1")
                     if component is None:
                         component = await self.opcua_component_manager.create_component(column.source_name, idx, components_folder)
                         self.log.info(f"Added new component: {column.source_name}")
-                    
-                    self.log.info("####################2")
 
                     # data_nameに一致する変数を取得
                     variable = component.get_variable(column.data_name)
                     if variable is None:
                         variable = await component.create_variable(column, idx)
                         self.log.info(f"Added new variable: {column.data_name} to component: {component.name}")
-
-                    self.log.info("####################3")
 
                     # 変数の値を更新
                     await variable.update_value(column.get_latest_value()[1])
