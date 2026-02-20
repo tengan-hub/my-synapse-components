@@ -12,7 +12,7 @@
       "name": "OPC UA Server",
       "description": "",
       "component-type": "python",
-      "modulename": "tt_custom.opcua_server",
+      "modulename": "ttcustom.opcua_server",
       "parameter-ui-type": "html",
       "parameter-ui-size": "middle",
       "parameter-ui": "parameter_ui/opcua-server/dist",
@@ -20,6 +20,7 @@
     }
   },
   "python-requirements": [
-    "asyncua==1.1.8"
+    "asyncua~=1.1.8",
+    "cryptography~=46.0.5"
   ]
 }

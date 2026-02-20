@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 import typing
 from asyncua import ua, Server
 from asyncua.common.node import Node
-from datetime import UTC, datetime
+from asyncua.server.user_managers import User, UserManager, UserRole
+from asyncua.crypto.validator import CertificateValidator, CertificateValidatorOptions, TrustStore
 from dataclasses import dataclass
 from speedbeesynapse.component.base import DataType, HiveComponentBase, HiveComponentInfo, ErrorType
+
+from ttcustom.opcua_server.certificate import create_cert
 
 
 PARAMETER_ERROR = ErrorType('PARAMETER ERROR','detail')
@@ -56,12 +60,31 @@ class OPCUAComponentManager:
         self.components.append(component)
         return component
 
+class CustomUserManager(UserManager):
+    def __init__(self, logger):
+        self.users = [
+            {"username": "admin", "password": "admin"},
+            {"username": "user", "password": "password"},
+        ]
+        self.log = logger
+
+    def get_user(self, iserver, username=None, password=None, certificate=None):
+        
+        # Implement your custom user authentication logic here
+        if username == "admin" and password == "admin":
+            return User(role=UserRole.Admin)
+        elif username == "user" and password == "user":
+            return User(role=UserRole.User)
+        else:
+            return None
+
 @dataclass
 class Parameter:
     endpoint: str = ""
     server_name: str = ""
     namespace_uri: str = ""
-    
+    server_cert_dir: Path = Path("C:/Users/tteng/work/my-synapse-components/opcua-server/.synapse/var-speedbeesynapse/certs")
+
     @classmethod
     def from_dict(cls, raw_param: dict | str) -> Parameter:
         try:
@@ -84,20 +107,40 @@ class HiveComponent(HiveComponentBase):
         self.log.info(f"Parsing parameters: {param}")
         self.param = Parameter.from_dict(param)
         self.opcua_component_manager: OPCUAComponentManager = OPCUAComponentManager()
+        key_path, cert_path = create_cert(self.param.server_cert_dir)
+        self.key_path = key_path
+        self.cert_path = cert_path
+        self.trust_cert_store = Path("C:/Users/tteng/work/my-synapse-components/opcua-server/.synapse/var-speedbeesynapse/certs") / "trust_store"
 
     def main(self, _param: dict | str) -> None:
         asyncio.run(self._main())
 
     async def _main(self) -> None:
-        server = Server()
+        user_manager = CustomUserManager(self.log)
+        server = Server(user_manager=user_manager)
         await server.init()
         server.set_endpoint(self.param.endpoint)
         server.set_server_name(self.param.server_name)
         server.set_security_policy([
             ua.SecurityPolicyType.NoSecurity,
+            ua.SecurityPolicyType.Basic128Rsa15_Sign,
+            ua.SecurityPolicyType.Basic128Rsa15_SignAndEncrypt,
+            ua.SecurityPolicyType.Basic256_Sign,
+            ua.SecurityPolicyType.Basic256_SignAndEncrypt,
             ua.SecurityPolicyType.Basic256Sha256_Sign,
             ua.SecurityPolicyType.Basic256Sha256_SignAndEncrypt
         ])
+        server.set_security_IDs(["Anonymous", "Username"])
+        await server.load_certificate(self.cert_path)
+        await server.load_private_key(self.key_path)
+        await server.set_application_uri('urn:DESKTOP-394KAR9:Saltyster:SpeeDBeeSynapse')
+
+        trust_store = TrustStore([self.trust_cert_store], [])
+        await trust_store.load()
+        validator = CertificateValidator(
+            CertificateValidatorOptions.TRUSTED | CertificateValidatorOptions.PEER_CLIENT, trust_store
+        )
+        server.set_certificate_validator(validator)
 
         idx = await server.register_namespace(self.param.namespace_uri)
         components_folder = await server.nodes.objects.add_folder(idx, "Components")
@@ -106,7 +149,6 @@ class HiveComponent(HiveComponentBase):
             while self.is_runnable():
                 columns = self.in_port1.get_columns()
                 for column in columns:
-                    self.log.info(column.source_name)
                     # source_nameに一致するコンポーネントを取得
                     component = self.opcua_component_manager.get_component(column.source_name)
                     if component is None:
