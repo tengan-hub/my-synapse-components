@@ -39,7 +39,8 @@ class OPCUAComponent:
         return None
     
     async def create_variable(self, column: any, name_space: int):
-        variable_node = await self.node.add_variable(name_space, column.data_name, column.get_latest_value()[1])
+        node_id = ua.NodeId(f'{column.source_name}:{column.data_name}', name_space, ua.NodeIdType.String)
+        variable_node = await self.node.add_variable(node_id, column.data_name, column.get_latest_value()[1])
         variable = OPCUAVariable(column.data_name, column.data_type, variable_node)
         self.variables.append(variable)
         return variable
@@ -55,7 +56,8 @@ class OPCUAComponentManager:
         return None
 
     async def create_component(self, component_name: str, name_space: int, folder: Node) -> OPCUAComponent:
-        component_node = await folder.add_object(name_space, component_name)
+        node_id = ua.NodeId(component_name, name_space, ua.NodeIdType.String)
+        component_node = await folder.add_object(node_id, component_name)
         component = OPCUAComponent(component_name, component_node)
         self.components.append(component)
         return component
@@ -83,7 +85,6 @@ class Parameter:
     endpoint: str = ""
     server_name: str = ""
     namespace_uri: str = ""
-    server_cert_dir: Path = Path("C:/Users/tteng/work/my-synapse-components/opcua-server/.synapse/var-speedbeesynapse/certs")
 
     @classmethod
     def from_dict(cls, raw_param: dict | str) -> Parameter:
@@ -107,10 +108,22 @@ class HiveComponent(HiveComponentBase):
         self.log.info(f"Parsing parameters: {param}")
         self.param = Parameter.from_dict(param)
         self.opcua_component_manager: OPCUAComponentManager = OPCUAComponentManager()
-        key_path, cert_path = create_cert(self.param.server_cert_dir)
-        self.key_path = key_path
-        self.cert_path = cert_path
-        self.trust_cert_store = Path("C:/Users/tteng/work/my-synapse-components/opcua-server/.synapse/var-speedbeesynapse/certs") / "trust_store"
+
+        # サーバー証明書の作成と保存（現状は、固定の証明書を使う。）
+        # current_file = Path(__file__)
+        # config_path = current_file.parent
+        # server_cert_dir = config_path / "server_certs"
+        # key_path, cert_path = create_cert(server_cert_dir)
+        # self.key_path = key_path
+        # self.cert_path = cert_path
+        current_file = Path(__file__)
+        config_path = current_file.parent
+        server_cert_dir = config_path / "server_certs"
+        self.key_path = server_cert_dir / "server_key.pem"
+        self.cert_path = server_cert_dir / "server_cert.pem"
+
+        # クライアント証明書の信頼ストアのパスを設定（いずれparameterで受けとるようにする）
+        self.trust_client_cert_store = Path("C:/Users/tteng/work/my-synapse-components/opcua-server/.synapse/var-speedbeesynapse/certs") / "trust_store"
 
     def main(self, _param: dict | str) -> None:
         asyncio.run(self._main())
@@ -135,7 +148,7 @@ class HiveComponent(HiveComponentBase):
         await server.load_private_key(self.key_path)
         await server.set_application_uri('urn:DESKTOP-394KAR9:Saltyster:SpeeDBeeSynapse')
 
-        trust_store = TrustStore([self.trust_cert_store], [])
+        trust_store = TrustStore([self.trust_client_cert_store], [])
         await trust_store.load()
         validator = CertificateValidator(
             CertificateValidatorOptions.TRUSTED | CertificateValidatorOptions.PEER_CLIENT, trust_store

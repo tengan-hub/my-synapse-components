@@ -16,8 +16,8 @@ key = rsa.generate_private_key(
 )
 
 def create_cert(cert_dir: Path) -> tuple[Path, Path]:
-    key_path = cert_dir / 'client_key.pem'
-    cert_path = cert_dir / 'client_cert.pem'
+    key_path = cert_dir / 'server_key.pem'
+    cert_path = cert_dir / 'server_cert.pem'
     if key_path.exists() and cert_path.exists():
         return key_path, cert_path
 
