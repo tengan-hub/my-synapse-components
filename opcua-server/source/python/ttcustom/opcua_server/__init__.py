@@ -20,47 +20,61 @@ ERROR_TYPES = [PARAMETER_ERROR]
 class OPCUAVariable:
     def __init__(self, data_name: str, data_type: str, node: Node):
         self.name = data_name
-        self.node = node
         self.data_type = data_type
+        self.node = node
+
+    @classmethod
+    async def create(cls, namespace_idx: int, parent_node: Node, column: any):
+        node_id = ua.NodeId(f'{column.source_name}:{column.data_name}', namespace_idx, ua.NodeIdType.String)
+        variable_node = await parent_node.add_variable(node_id, column.data_name, column.get_latest_value()[1])
+        return cls(column.data_name, column.data_type, variable_node)
 
     async def update_value(self, value: any):
         await self.node.write_value(value)
 
-class OPCUAComponent:
+class OPCUAComponentObject:
     def __init__(self, component_name: str, node: Node):
         self.name: str = component_name
         self.node: Node = node
         self.variables: list[OPCUAVariable] = []
+
+    @classmethod
+    async def create(cls, namespace_idx: int, component_name: str, folder: Node) -> OPCUAComponentObject:
+        node_id = ua.NodeId(component_name, namespace_idx, ua.NodeIdType.String)
+        component_node = await folder.add_object(node_id, component_name)
+        return cls(component_name, component_node)
 
     def get_variable(self, variable_name: str) -> typing.Optional[OPCUAVariable]:
         for variable in self.variables:
             if variable.name == variable_name:
                 return variable
         return None
-    
-    async def create_variable(self, column: any, name_space: int):
-        node_id = ua.NodeId(f'{column.source_name}:{column.data_name}', name_space, ua.NodeIdType.String)
-        variable_node = await self.node.add_variable(node_id, column.data_name, column.get_latest_value()[1])
-        variable = OPCUAVariable(column.data_name, column.data_type, variable_node)
+
+    async def add_variable(self, namespace_idx: int, column: any) -> OPCUAVariable:
+        variable = await OPCUAVariable.create(namespace_idx, self.node, column)
         self.variables.append(variable)
         return variable
 
-class OPCUAComponentManager:
-    def __init__(self):
-        self.components: list[OPCUAComponent] = []
+class OPCUAComponentsFolder:
+    def __init__(self, node: Node):
+        self.node = node
+        self.component_objects: list[OPCUAComponentObject] = []
 
-    def get_component(self, component_name: str) -> typing.Optional[OPCUAComponent]:
-        for component in self.components:
-            if component.name == component_name:
-                return component
+    @classmethod
+    async def create(cls, server: Server, namespace_idx: int) -> OPCUAComponentsFolder:
+        components_folder = await server.nodes.objects.add_folder(namespace_idx, "Components")
+        return cls(components_folder)
+
+    def get_component_object(self, component_name: str) -> typing.Optional[OPCUAComponentObject]:
+        for component_obj in self.component_objects:
+            if component_obj.name == component_name:
+                return component_obj
         return None
-
-    async def create_component(self, component_name: str, name_space: int, folder: Node) -> OPCUAComponent:
-        node_id = ua.NodeId(component_name, name_space, ua.NodeIdType.String)
-        component_node = await folder.add_object(node_id, component_name)
-        component = OPCUAComponent(component_name, component_node)
-        self.components.append(component)
-        return component
+    
+    async def add_component_object(self, namespace_idx: int, component_name: str) -> OPCUAComponentObject:
+        component_obj = await OPCUAComponentObject.create(namespace_idx, component_name, self.node)
+        self.component_objects.append(component_obj)
+        return component_obj
 
 class CustomUserManager(UserManager):
     def __init__(self, logger):
@@ -107,7 +121,6 @@ class HiveComponent(HiveComponentBase):
     def premain(self, param: dict | str) -> None:
         self.log.info(f"Parsing parameters: {param}")
         self.param = Parameter.from_dict(param)
-        self.opcua_component_manager: OPCUAComponentManager = OPCUAComponentManager()
 
         # サーバー証明書の作成と保存（現状は、固定の証明書を使う。）
         # current_file = Path(__file__)
@@ -155,24 +168,24 @@ class HiveComponent(HiveComponentBase):
         )
         server.set_certificate_validator(validator)
 
-        idx = await server.register_namespace(self.param.namespace_uri)
-        components_folder = await server.nodes.objects.add_folder(idx, "Components")
+        namespace_idx = await server.register_namespace(self.param.namespace_uri)
+        self.opcua_components_folder = await OPCUAComponentsFolder.create(server, namespace_idx)
 
         async with server:
             while self.is_runnable():
                 columns = self.in_port1.get_columns()
                 for column in columns:
                     # source_nameに一致するコンポーネントを取得
-                    component = self.opcua_component_manager.get_component(column.source_name)
-                    if component is None:
-                        component = await self.opcua_component_manager.create_component(column.source_name, idx, components_folder)
-                        self.log.info(f"Added new component: {column.source_name}")
+                    component_obj = self.opcua_components_folder.get_component_object(column.source_name)
+                    if component_obj is None:
+                        component_obj = await self.opcua_components_folder.add_component_object(namespace_idx, column.source_name)
+                        self.log.info(f"Added new component: {component_obj.name}")
 
                     # data_nameに一致する変数を取得
-                    variable = component.get_variable(column.data_name)
+                    variable = component_obj.get_variable(column.data_name)
                     if variable is None:
-                        variable = await component.create_variable(column, idx)
-                        self.log.info(f"Added new variable: {column.data_name} to component: {component.name}")
+                        variable = await component_obj.add_variable(namespace_idx, column)
+                        self.log.info(f"Added new variable: {variable.name} to component: {component_obj.name}")
 
                     # 変数の値を更新
                     await variable.update_value(column.get_latest_value()[1])
